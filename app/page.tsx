@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Auth from '@/components/Auth';
 import ProUpgrade from '@/components/ProUpgrade';
+import Matchmaking from '@/components/Matchmaking';
 
 export default function Home() {
   return (
@@ -27,6 +28,9 @@ export default function Home() {
         </Link>
         <Link href="/profile" className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded text-center">
           👤 Мой профиль
+        </Link>
+        <Link href="/lobby" className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded text-center">
+          🎮 Лобби открытых игр
         </Link>
         <div className="flex justify-center">
           <ProUpgrade />
