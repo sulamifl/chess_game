@@ -32,6 +32,15 @@ export default function Home() {
         <Link href="/lobby" className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded text-center">
           🎮 Лобби открытых игр
         </Link>
+        <Link href="/tournament/create" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded text-center">
+          🏆 Создать турнир
+        </Link>
+        <Link href="/tournaments/tournaments" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded text-center">
+          🏆 Список турниров
+        </Link>
+        <Link href="/watch" className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded text-center">
+          🎥 Смотреть трансляции
+        </Link>
         <div className="flex justify-center">
           <ProUpgrade />
         </div>

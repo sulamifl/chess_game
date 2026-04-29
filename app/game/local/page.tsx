@@ -5,17 +5,16 @@ import ChessboardComponent from '@/components/Chessboard';
 import { Chess } from 'chess.js';
 import { supabase } from '@/lib/supabase';
 import { saveGame } from '@/lib/db';
-import { deductTokens, getTokens } from '@/lib/tokens';
 
 export default function LocalGame() {
   const [game, setGame] = useState(new Chess());
   const [fen, setFen] = useState(game.fen());
   const [gameOver, setGameOver] = useState(false);
   const [result, setResult] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [coachAdvice, setCoachAdvice] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showCoachModal, setShowCoachModal] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -23,28 +22,26 @@ export default function LocalGame() {
     });
   }, []);
 
-  useEffect(() => {
-    const saveIfOver = async () => {
-      if (gameOver && currentUserId) {
-        const pgn = game.pgn();
-        let resultCode = '1/2-1/2';
-        if (game.isCheckmate()) {
-          resultCode = game.turn() === 'w' ? '0-1' : '1-0';
-        } else if (game.isStalemate()) resultCode = '1/2-1/2';
-        await saveGame(currentUserId, pgn, resultCode);
-      }
-    };
-    saveIfOver();
-  }, [gameOver, game, currentUserId]);
-
-  const checkGameOver = (currentGame: Chess) => {
+  const checkGameOver = async (currentGame: Chess) => {
     if (currentGame.isGameOver()) {
       setGameOver(true);
+      let resultText = '';
+      let resultCode = '1/2-1/2';
       if (currentGame.isCheckmate()) {
         const loser = currentGame.turn() === 'w' ? 'Белые' : 'Чёрные';
-        setResult(`Мат! Победили ${loser === 'Белые' ? 'Чёрные' : 'Белые'}`);
-      } else if (currentGame.isStalemate()) setResult('Пат! Ничья');
-      else setResult('Игра окончена');
+        resultText = `Мат! Победили ${loser === 'Белые' ? 'Чёрные' : 'Белые'}`;
+        resultCode = currentGame.turn() === 'w' ? '0-1' : '1-0';
+      } else if (currentGame.isStalemate()) {
+        resultText = 'Пат! Ничья';
+      } else {
+        resultText = 'Игра окончена';
+      }
+      setResult(resultText);
+
+      if (currentUserId) {
+        const pgn = currentGame.pgn();
+        await saveGame(currentUserId, pgn, resultCode);
+      }
       return true;
     }
     return false;
@@ -54,15 +51,12 @@ export default function LocalGame() {
     if (gameOver) return false;
     const gameCopy = new Chess(game.fen());
     try {
-      const move = gameCopy.move({
-        from: source,
-        to: target,
-        promotion: 'q',
-      });
+      const move = gameCopy.move({ from: source, to: target, promotion: 'q' });
       if (move) {
-        setGame(gameCopy);
-        setFen(gameCopy.fen());
-        checkGameOver(gameCopy);
+        game.move({ from: source, to: target, promotion: 'q' });
+        setGame(game);
+        setFen(game.fen());
+        checkGameOver(game);
         return true;
       }
       return false;
@@ -77,28 +71,10 @@ export default function LocalGame() {
     setFen(newGame.fen());
     setGameOver(false);
     setResult('');
-    setShowModal(false);
   };
 
   const handleAnalyze = async () => {
     if (!gameOver) return;
-    if (!currentUserId) {
-      setCoachAdvice('Войдите в аккаунт, чтобы использовать AI Coach.');
-      setShowModal(true);
-      return;
-    }
-    const tokens = await getTokens(currentUserId);
-    if (tokens < 1) {
-      setCoachAdvice('Недостаточно токенов. Сыграйте партию против ИИ и выиграйте, чтобы получить токены.');
-      setShowModal(true);
-      return;
-    }
-    const deducted = await deductTokens(currentUserId, 1);
-    if (!deducted) {
-      setCoachAdvice('Ошибка списания токенов.');
-      setShowModal(true);
-      return;
-    }
     setAnalyzing(true);
     try {
       const pgn = game.pgn();
@@ -110,61 +86,39 @@ export default function LocalGame() {
       const data = await response.json();
       setCoachAdvice(data.advice || 'Анализ не дал результатов.');
     } catch (err) {
-      console.error(err);
       setCoachAdvice('Ошибка при анализе партии.');
     }
     setAnalyzing(false);
-    setShowModal(true);
+    setShowCoachModal(true);
   };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
       <div className="w-full max-w-[600px]">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
           <div className="text-center text-xl font-semibold mb-2">
-            {gameOver ? (
-              <span className="text-red-600">{result}</span>
-            ) : (
-              <span>Ход: {game.turn() === 'w' ? '⚪ Белые' : '⚫ Чёрные'}</span>
-            )}
+            {gameOver ? <span className="text-red-600">{result}</span> : <span>Ход: {game.turn() === 'w' ? '⚪ Белые' : '⚫ Чёрные'}</span>}
           </div>
-          <ChessboardComponent
-            position={fen}
-            onPieceDrop={onPieceDrop}
-            arePiecesDraggable={!gameOver}
-          />
+          <ChessboardComponent position={fen} onPieceDrop={onPieceDrop} arePiecesDraggable={!gameOver} />
           <div className="mt-4 space-y-2">
             {gameOver && (
-              <>
-                <button
-                  onClick={resetGame}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                >
-                  Новая игра
-                </button>
-                <button
-                  onClick={handleAnalyze}
-                  disabled={analyzing}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50"
-                >
-                  {analyzing ? 'Анализ партии...' : '🧠 AI Coach (1 токен)'}
-                </button>
-              </>
+              <button onClick={resetGame} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Новая игра</button>
+            )}
+            {gameOver && (
+              <button onClick={handleAnalyze} disabled={analyzing} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                {analyzing ? 'Анализ...' : '🧠 AI Coach (анализ партии)'}
+              </button>
             )}
           </div>
         </div>
       </div>
-      {showModal && (
+
+      {showCoachModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-2">Советы AI-коуча</h3>
             <div className="whitespace-pre-wrap mb-4">{coachAdvice}</div>
-            <button
-              onClick={() => setShowModal(false)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-            >
-              Закрыть
-            </button>
+            <button onClick={() => setShowCoachModal(false)} className="bg-blue-600 text-white px-4 py-2 rounded">Закрыть</button>
           </div>
         </div>
       )}
